@@ -7,6 +7,15 @@ always carries a cited rule trace -- which rules fired, in evaluation
 order -- so referrals and declines surface the exact triggering rules.
 No silent overrides: a rule fires or it does not, and the trace proves it.
 
+Missing inputs fail closed. The planner passes ``loss_ratio=None`` when the
+territory has no loss history and ``cat_risk=None`` when the catastrophe feed
+returned a gap; UW-DATA-07 then refers the application instead of letting
+UW-TER-03 / UW-CAT-06 read the gap as "low risk". (A key that is simply
+absent from ``ctx`` means the caller did not supply that input, which unit
+tests use to exercise one rule at a time.)
+
+Declined applications get no quoted premium.
+
 Pricing bands (A/B/C/D) convert the risk score into a rate multiplier.
 Base rates below are illustrative synthetic constants, not market rates.
 """
@@ -31,7 +40,8 @@ def _clm(app, ctx):
 
 
 def _ter(app, ctx):
-    return ctx.get("loss_ratio", 0.0) > TERRITORY_REFERRAL_LR
+    lr = ctx.get("loss_ratio")
+    return lr is not None and lr > TERRITORY_REFERRAL_LR
 
 
 def _yng(app, ctx):
@@ -44,6 +54,12 @@ def _crd(app, ctx):
 
 def _cat(app, ctx):
     return app["line"] == "property" and ctx.get("cat_risk") == "high"
+
+
+def _data(app, ctx):
+    if "loss_ratio" in ctx and ctx["loss_ratio"] is None:
+        return True
+    return app["line"] == "property" and "cat_risk" in ctx and ctx["cat_risk"] is None
 
 
 RULES = [
@@ -59,6 +75,8 @@ RULES = [
      "note": "poor insurance credit band"},
     {"id": "UW-CAT-06", "outcome": "refer", "check": _cat,
      "note": "property in a high catastrophe-risk territory"},
+    {"id": "UW-DATA-07", "outcome": "refer", "check": _data,
+     "note": "a rating input is missing (no territory loss history or cat-feed gap)"},
 ]
 
 
@@ -67,7 +85,7 @@ def risk_score(app, ctx=None):
     ctx = ctx or {}
     score = 10.0
     score += min(45.0, 15.0 * app["prior_claims"])
-    if ctx.get("loss_ratio", 0.0) > TERRITORY_REFERRAL_LR:
+    if (ctx.get("loss_ratio") or 0.0) > TERRITORY_REFERRAL_LR:
         score += 25.0
     if app["credit_band"] == "poor":
         score += 20.0
@@ -127,5 +145,5 @@ def evaluate(app, ctx=None):
         "risk_score": score,
         "pricing_band": band,
         "multiplier": multiplier,
-        "quoted_premium": quote_premium(app, ctx),
+        "quoted_premium": None if decision == "decline" else quote_premium(app, ctx),
     }
