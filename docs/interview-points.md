@@ -14,5 +14,5 @@
   views; a SQLite authorizer enforces the view allowlist however a table is
   spelled (ADR 0001).
 - **Human gates.** Declines and high-value issuance always wait for a person.
-- **Honest numbers.** 85 tests are regression checks on synthetic data, not
+- **Honest numbers.** 99 tests are regression checks on synthetic data, not
   claims about real underwriting quality.

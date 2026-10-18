@@ -5,7 +5,7 @@ business — a rules engine scores every application into auto-approve /
 refer / decline with a cited rule trace, a ReAct planner answers backlog,
 referral, servicing, loss-ratio, and renewal questions from governed
 SQLite views, and declines plus high-value issuance wait on human
-confirmation gates. 85 tests, all green; every figure below comes from a
+confirmation gates. 99 tests, all green; every figure below comes from a
 real run of this repo.
 
 ## The problem
@@ -38,7 +38,7 @@ Deterministic building blocks, no model required:
 
 ## Outcome
 
-Real run (`python -m pytest tests/ -q`): **85 passed**. Deterministic
+Real run (`python -m pytest tests/ -q`): **99 passed**. Deterministic
 anchors prove the spine: `APP-HIGHVAL-001` ($2.5M Gulf-Coast property)
 refers on `UW-COV-01` + `UW-TER-03` + `UW-CAT-06`; `APP-DECLINE-001`
 (4 prior claims) declines on `UW-CLM-02` behind a confirmation gate;
@@ -154,7 +154,7 @@ Test count (also checked by CI):
 
 <!-- run: python scripts/count_tests.py -->
 ```text
-85 tests collected
+99 tests collected
 ```
 <!-- /run -->
 
@@ -165,6 +165,23 @@ python -m pytest tests/ -q              # offline, stdlib only
 python scripts/show_differentiator.py   # the rules engine on the seeded anchors
 python scripts/check_brands.py          # hashed brand-name check (also in CI)
 ```
+
+### Authorizer template sync (2026-10-18)
+
+The SQLite authorizer was updated to the shared strict, view-aware version.
+A base-table read is allowed only when SQLite reports it on behalf of one of
+the allowed views (the authorizer's view-name argument). A read with no view
+name is denied. `sqlite_master` is always denied, even if listed, and so is
+`load_extension`. The old version falsely denied a self-join of `v_segment_loss`; a regression test covers it.
+`tests/test_authorizer_sync.py` drives the authorizer directly, independent
+of the text check. It covers comma joins and comment-obfuscated joins with a
+base table, every view, and view self-joins.
+
+Known residual: a read that uses no columns of a table behind a view is
+allowed, because SQLite reports the unused side of a view self-join the same
+way. So `SELECT count(*) FROM <that table>` or `EXISTS (SELECT 1 FROM ...)`
+can still reveal a row count, but no column data. Any column reference is
+denied.
 
 ## Built / Written-not-run / Planned
 
