@@ -7,16 +7,11 @@ import pytest
 
 from underwrite import audit as audit_mod
 from underwrite import catsignal as cat_mod
-from underwrite import demo_helpers
+from underwrite import demo_helpers, orchestrator, rules, sop_rag, text2sql, views
 from underwrite import escalation as esc
 from underwrite import feedback as fb
-from underwrite import orchestrator
 from underwrite import pii as pii_mod
-from underwrite import rules
-from underwrite import sop_rag
 from underwrite import telemetry as tel
-from underwrite import text2sql
-from underwrite import views
 from underwrite.views import SecurityError
 
 SOPS_DIR = os.path.join(os.path.dirname(os.path.dirname(
@@ -73,7 +68,8 @@ def test_seed_is_deterministic():
     a2 = c2.execute("SELECT app_id FROM applications ORDER BY app_id"
                     ).fetchall()
     assert [r["app_id"] for r in a1] == [r["app_id"] for r in a2]
-    c1.close(); c2.close()
+    c1.close()
+    c2.close()
 
 
 def test_gulf_coast_anchor_loss_ratio(conn):
@@ -138,7 +134,7 @@ def test_rules_trace_order_is_stable():
                        {"loss_ratio": 0.9})
     ids = [t["rule_id"] for t in r["trace"]]
     assert ids == ["UW-COV-01", "UW-CLM-02", "UW-TER-03", "UW-YNG-04",
-                   "UW-CRD-05", "UW-CAT-06"]
+                   "UW-CRD-05", "UW-CAT-06", "UW-DATA-07"]
 
 
 def test_rules_decline_outranks_refer():
@@ -579,3 +575,31 @@ def test_recent_audit_rows(conn):
     assert len(rows) <= 5
     assert all(set(r) == {"seq", "actor", "action", "hash"} for r in rows)
     assert all(len(r["hash"]) == 12 for r in rows)
+
+
+# ---------- review fixes (grokbot-portfolio, 2026-10-18) ----------
+
+def test_cat_feed_gap_refers_instead_of_reading_as_low_risk():
+    app = _app(line="property", coverage_amount=200_000.0)
+    known_low = rules.evaluate(app, {"loss_ratio": 0.5, "cat_risk": "low"})
+    gap = rules.evaluate(app, {"loss_ratio": 0.5, "cat_risk": None})
+    assert known_low["decision"] == "auto-approve"
+    assert gap["decision"] == "refer-to-underwriter"
+    assert gap["triggered"] == ["UW-DATA-07"]
+
+
+def test_unknown_territory_loss_history_refers():
+    r = rules.evaluate(_app(), {"loss_ratio": None, "cat_risk": "low"})
+    assert "UW-DATA-07" in r["triggered"]
+    assert r["decision"] == "refer-to-underwriter"
+
+
+def test_live_cat_gap_reaches_rules_as_unknown(conn):
+    planner = _planner(conn, cat_backend=cat_mod.LiveCatSignal())
+    result = planner.ask("Underwrite APP-CLEAN-001")
+    assert result["underwriting"]["ctx"]["cat_risk"] is None
+
+
+def test_declined_application_gets_no_quote():
+    r = rules.evaluate(_app(prior_claims=4))
+    assert r["decision"] == "decline" and r["quoted_premium"] is None

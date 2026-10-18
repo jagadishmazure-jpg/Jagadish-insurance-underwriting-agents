@@ -11,10 +11,7 @@ import re
 from . import audit as audit_mod
 from . import catsignal as cat_mod
 from . import escalation as esc
-from . import rules
-from . import sop_rag
-from . import text2sql
-from . import views
+from . import rules, sop_rag, text2sql, views
 
 _APP_RE = re.compile(r"\bAPP-[A-Z0-9-]+\b", re.I)
 _UNDERWRITE_RE = re.compile(r"underwrite|triage|score|decision on|quote", re.I)
@@ -32,7 +29,7 @@ class PlannerAgent:
         row = self.conn.execute(
             "SELECT loss_ratio FROM territories WHERE territory = ?",
             (territory,)).fetchone()
-        return row[0] if row else 0.0
+        return row[0] if row else None  # unknown territory: fail closed (UW-DATA-07)
 
     # -- tool-facing helpers -------------------------------------------------
     def _tool_sql(self, intent):
@@ -50,10 +47,12 @@ class PlannerAgent:
                               {"app_id": app_id})
             return None
         app = dict(row)
+        signal = self.cat.get_signal(app["territory"])
         ctx = {
             "loss_ratio": self._territory_loss(app["territory"]),
-            "cat_risk": ("high" if self.cat.get_signal(
-                app["territory"]).get("band") == "high" else "low"),
+            # A feed gap is unknown risk, not low risk (UW-DATA-07 refers it).
+            "cat_risk": (None if not signal.get("ok") else
+                         "high" if signal.get("band") == "high" else "low"),
         }
         result = rules.evaluate(app, ctx)
         self.audit.record("planner", "tool.underwrite", {
@@ -123,7 +122,7 @@ class PlannerAgent:
             "row_counts": {k: len(v["rows"]) for k, v in sql_results.items()},
             "underwriting": ({k: uw_result[k] for k in
                               ("decision", "triggered", "pricing_band",
-                               "risk_score", "quoted_premium")}
+                               "risk_score", "quoted_premium", "ctx")}
                              if uw_result else None),
             "answer": answer,
             "citations": citations,
@@ -184,8 +183,10 @@ class PlannerAgent:
                 f"{app['territory']}): decision "
                 f"{uw_result['decision']} -- pricing band "
                 f"{uw_result['pricing_band']} (score "
-                f"{uw_result['risk_score']}, quoted premium "
-                f"${uw_result['quoted_premium']:,.2f}).")
+                f"{uw_result['risk_score']}, "
+                + ("no quote: declined" if uw_result["quoted_premium"] is None
+                   else f"quoted premium ${uw_result['quoted_premium']:,.2f}")
+                + ").")
             if uw_result["triggered"]:
                 lines.append("Triggered rules: "
                              + ", ".join(uw_result["triggered"]) + ".")

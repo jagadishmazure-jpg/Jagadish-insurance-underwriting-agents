@@ -6,10 +6,10 @@ flowchart TD
         T[telemetry.py<br/>applications / policies /<br/>endorsements / work_queue]
     end
     subgraph GUARD["Least-privilege access"]
-        V[views.py<br/>4 read-only views<br/>SEC-SELECT-01/02/03]
+        V[views.py<br/>4 read-only views<br/>SEC-SELECT-01 / SEC-WRITE-02 / SEC-VIEW-03<br/>+ SQLite authorizer]
     end
     subgraph BRAIN["Rules engine (differentiator)"]
-        R[rules.py<br/>UW-COV-01…UW-CAT-06<br/>decision + cited trace<br/>pricing bands A–D]
+        R[rules.py<br/>UW-COV-01…UW-DATA-07<br/>decision + cited trace<br/>pricing bands A–D]
     end
     subgraph TOOLS["Planner tools"]
         S[text2sql.py<br/>5 intents]

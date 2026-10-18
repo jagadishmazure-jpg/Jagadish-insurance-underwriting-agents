@@ -13,7 +13,9 @@ def format_answer(result):
         lines.append("")
         lines.append(
             f"Decision: {uw['decision']} | Band {uw['pricing_band']} | "
-            f"Score {uw['risk_score']} | Quoted ${uw['quoted_premium']:,.2f}")
+            f"Score {uw['risk_score']} | "
+            + ("No quote (declined)" if uw["quoted_premium"] is None
+               else f"Quoted ${uw['quoted_premium']:,.2f}"))
         if uw["triggered"]:
             lines.append("Rules: " + ", ".join(uw["triggered"]))
     if result.get("citations"):

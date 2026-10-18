@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 *.db
 .DS_Store
+*.py[cod]
+.ruff_cache/
+*.pdf
