@@ -1,0 +1,12 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "insurance-underwriting-agents"
+version = "0.1.0"
+description = "End-to-end insurance underwriting triage + policy servicing (synthetic data, stdlib only)"
+requires-python = ">=3.10"
+
+[tool.hatch.build.targets.wheel]
+packages = ["underwrite"]
